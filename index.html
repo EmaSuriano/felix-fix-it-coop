@@ -2,15 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Kaplay Coop Starter</title>
+<title>Felix Fix-It Coop</title>
 <link rel="stylesheet" href="/src/style.css">
 </head>
 <body>
 
 <div id="overlay">
   <div id="card">
-    <h1>Kaplay Coop</h1>
-    <p class="sub">Peer-to-peer starter. Host a room, share the link.</p>
+    <h1>FIX-IT FELIX</h1>
+    <p class="sub">Two players, one building. Host a room, share the link.</p>
 
     <div class="row">
       <button class="primary" id="hostBtn">Create Room</button>
@@ -30,8 +30,18 @@
 
 <div id="gameWrap">
   <div id="hud">
-    <span class="you">■ YOU</span> — WASD / Arrows to move &nbsp;|&nbsp;
-    <span class="peer">■ PEERS</span> connected: <span id="peerCount">0</span>
+    <span class="you">■ YOU</span>
+    <span id="youName">Host</span>
+    pts <span id="youScore">0</span>
+    lives <span id="youLives">3</span>
+    &nbsp;|&nbsp;
+    <span class="peer">■ PEER</span>
+    <span id="peerName">Guest</span>
+    pts <span id="peerScore">0</span>
+    lives <span id="peerLives">3</span>
+    &nbsp;|&nbsp;
+    connected: <span id="peerCount">0</span>
+    &nbsp;|&nbsp; WASD / Arrows move · Space / J hammer
   </div>
   <canvas id="gameCanvas"></canvas>
 </div>
