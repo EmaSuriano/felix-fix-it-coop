@@ -3,8 +3,8 @@
     --panel: #1b202b;
     --ink: #e7e9ee;
     --dim: #7c8394;
-    --accent: #6ee7a8;
-    --accent2: #f2b84b;
+    --accent: #3b6cff;
+    --accent2: #e07020;
     --danger: #f2555a;
     --border: #2c3342;
   }
@@ -73,7 +73,7 @@
     width: 100%;
     font-weight: bold;
   }
-  button.primary:hover { background: #85f0b6; color: #0d1016; }
+  button.primary:hover { background: #5b86ff; color: #0d1016; }
   button:disabled {
     opacity: 0.45;
     cursor: not-allowed;
@@ -96,6 +96,7 @@
   }
   #hud {
     position: fixed; top: 10px; left: 10px;
+    right: 10px;
     font-size: 11px; color: var(--dim);
     z-index: 5; letter-spacing: 1px;
   }
