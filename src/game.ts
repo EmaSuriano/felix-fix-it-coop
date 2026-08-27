@@ -55,6 +55,8 @@ type WorldMsg = {
   stage: number
   over: boolean
   started: boolean
+  ralphCol: number
+  ralphThrowMs: number
 }
 
 type SimPlayer = {
@@ -221,6 +223,8 @@ export function startGame(
       stage,
       over,
       started,
+      ralphCol,
+      ralphThrowMs: Math.max(0, ralphThrowUntil - t),
     }
   }
 
@@ -377,7 +381,7 @@ export function startGame(
         const col = randInt(0, COLS - 1)
         bricks.push({ col, row: 0 })
         ralphCol = col
-        ralphThrowUntil = t + 700
+        ralphThrowUntil = t + 2200
       }
       if (ducks.length < maxDucks && Math.random() < duckChance) {
         const dir = Math.random() < 0.5 ? 1 : -1
@@ -389,6 +393,7 @@ export function startGame(
       }
       if (!pie && t - lastPieAt > 12000 && Math.random() < 0.06) {
         pie = { col: randInt(0, COLS - 1), row: randInt(0, ROWS - 1) }
+        lastPieAt = t
       }
       checkHits(t)
       if (matchOver()) over = true
@@ -401,11 +406,14 @@ export function startGame(
     windows = data.windows
     bricks = Array.isArray(data.bricks) ? data.bricks : []
     ducks = Array.isArray(data.ducks) ? data.ducks : []
+    const t = nowMs()
+    if (data.pie && (!pie || pie.col !== data.pie.col || pie.row !== data.pie.row)) lastPieAt = t
     pie = data.pie ?? null
     stage = data.stage
     over = data.over
     started = Boolean(data.started)
-    const t = nowMs()
+    if (typeof data.ralphCol === 'number') ralphCol = data.ralphCol
+    ralphThrowUntil = t + Math.max(0, data.ralphThrowMs ?? 0)
     for (const np of data.players) {
       const p = simOf(np.id)
       p.col = np.col
@@ -603,6 +611,7 @@ export function startGame(
   let ralphCol = 2
   let ralphThrowUntil = 0
   let ralphDir = 1
+  let ralphX = WIN_X[2] + WIN_W / 2
 
   function cellXY(col: number, row: number): { x: number; y: number } {
     return { x: WIN_X[col] ?? WIN_X[0], y: WIN_Y[row] ?? WIN_Y[0] }
@@ -680,7 +689,15 @@ export function startGame(
         const st = windows[r]?.[c] ?? 0
         if (st === 0) continue
         const { x, y } = cellXY(c, r)
-        const sx = st === 2 ? 356 : 306
+        if (stage === 1 && r === 1 && c === 2) {
+          blitSheet(256 + 61 * (st - 1), 54, 61, 66, 224, 256, 61, 66, 1)
+          continue
+        }
+        if (stage === 1 && r === 2 && c === 2) {
+          blitSheet(256 + 58 * (st - 1), 0, 58, 54, 225, 380, 58, 54, 1)
+          continue
+        }
+        const sx = st === 2 ? 306 : 256
         if (!blitSheet(sx, 120, 50, 86, x, y, WIN_W, WIN_H, 1)) {
           k.drawRect({
             pos: k.vec2(x, y),
@@ -694,21 +711,36 @@ export function startGame(
   }
 
   function drawRalph(t: number): void {
-    const throwing = t < ralphThrowUntil
-    const { x } = cellXY(ralphCol, 0)
+    const target = (WIN_X[ralphCol] ?? WIN_X[2]) + WIN_W / 2
+    const gap = target - ralphX
+    const walking = Math.abs(gap) > 1.5
+    if (walking) {
+      ralphDir = gap > 0 ? 1 : -1
+      ralphX += ralphDir * Math.min(Math.abs(gap), 2.4)
+    } else {
+      ralphX = target
+    }
     let sx = 0
     let sy = 169
     let sw = 87
     let sh = 104
-    if (throwing) {
+    let py = 20
+    if (walking) {
+      const fra = Math.floor(t / 120) % 2
+      sx = fra === 0 ? 0 : 86
+      sy = ralphDir < 0 ? 273 : 385
+      sw = 86
+      sh = 112
+      py = 11
+    } else if (t < ralphThrowUntil) {
       const fra = Math.floor(t / 140) % 2
       sx = fra === 0 ? 372 : 240
       sy = 206
       sw = 132
       sh = 116
+      py = 7
     }
-    const px = x + WIN_W / 2 - sw / 2
-    const py = 18
+    const px = ralphX - sw / 2
     blitSheet(sx, sy, sw, sh, px, py, sw, sh, 1)
   }
 
@@ -733,8 +765,8 @@ export function startGame(
     }
     const dh = 65
     const dw = sw
-    const px = x + (WIN_W - dw) / 2
-    const py = y + WIN_H - dh
+    const px = x + (p.id === 'peer' ? 19 : 4)
+    const py = y + 8
     if (!blitSheet(sx, sheL, sw, 65, px, py, dw, dh, opacity)) {
       k.drawRect({
         pos: k.vec2(px, py),
@@ -776,16 +808,14 @@ export function startGame(
       }
     }
     if (pie) {
-      const { x, y } = cellXY(pie.col, pie.row)
-      const dw = 28
-      const dh = 24
-      if (!blitSheet(173, 134, 24, 20, x + (cellW - dw) / 2, y + cellH * 0.45, dw, dh, 1)) {
-        k.drawCircle({
-          pos: k.vec2(x + cellW * 0.5, y + cellH * 0.55),
-          radius: 9,
-          color: hexColor('#e8c07a'),
-          anchor: 'center',
-        })
+      const x = (WIN_X[pie.col] ?? WIN_X[0]) + 14
+      const y = [214, 322, 430][pie.row] - 24
+      const age = nowMs() - lastPieAt
+      if (age < 3000) {
+        blitSheet(173, 134, 24, 20, x, y, 24, 20, 1)
+      } else {
+        const sy = Math.floor(nowMs() / 500) % 2 === 0 ? 62 : 88
+        blitSheet(213, sy, 22, 26, x, y, 22, 26, 1)
       }
     }
   }
