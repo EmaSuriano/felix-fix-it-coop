@@ -11,6 +11,11 @@ import {
   TICK_S,
   SHEET_W,
   SHEET_H,
+  STAGE_H,
+  HUD_Y,
+  HUD_H,
+  MAPA_W,
+  MAPA_H,
 } from './config'
 
 const ROWS = GRID_ROWS
@@ -359,7 +364,10 @@ export function startGame(
       const brickChance = 0.12
       const duckChance = 0.08
       if (bricks.length < maxBricks && Math.random() < brickChance) {
-        bricks.push({ col: randInt(0, COLS - 1), row: 0 })
+        const col = randInt(0, COLS - 1)
+        bricks.push({ col, row: 0 })
+        ralphCol = col
+        ralphThrowUntil = t + 700
       }
       if (ducks.length < maxDucks && Math.random() < duckChance) {
         const dir = Math.random() < 0.5 ? 1 : -1
@@ -496,16 +504,18 @@ export function startGame(
   k.onKeyPress('space', tryHammer)
   k.onKeyPress('j', tryHammer)
 
-  const PAD_X = 36
-  const PAD_TOP = 44
-  const PAD_BOT = 78
-  const gridW = WIDTH - PAD_X * 2
-  const gridH = HEIGHT - PAD_TOP - PAD_BOT
-  const cellW = gridW / COLS
-  const cellH = gridH / ROWS
+  const WIN_W = 50
+  const WIN_H = 86
+  const WIN_X = [101, 165, 229, 293, 357]
+  const WIN_Y = [140, 248, 356]
+  const cellW = 64
+  const cellH = 108
+  let ralphCol = 2
+  let ralphThrowUntil = 0
+  let ralphDir = 1
 
   function cellXY(col: number, row: number): { x: number; y: number } {
-    return { x: PAD_X + col * cellW, y: PAD_TOP + row * cellH }
+    return { x: WIN_X[col] ?? WIN_X[0], y: WIN_Y[row] ?? WIN_Y[0] }
   }
 
   function setHud(id: string, text: string): void {
@@ -561,22 +571,15 @@ export function startGame(
         sprite: 'mapa',
         pos: k.vec2(0, 0),
         width: WIDTH,
-        height: HEIGHT,
-        quad: k.quad(0, 325 / 773, 506 / 1012, 448 / 773),
-      })
-      k.drawRect({
-        pos: k.vec2(0, 0),
-        width: WIDTH,
-        height: HEIGHT,
-        color: hexColor('#10131a'),
-        opacity: 0.22,
+        height: STAGE_H,
+        quad: k.quad(0, 325 / MAPA_H, 506 / MAPA_W, 448 / MAPA_H),
       })
       return
     }
     k.drawRect({
       pos: k.vec2(0, 0),
       width: WIDTH,
-      height: HEIGHT,
+      height: STAGE_H,
       color: hexColor('#1a2230'),
     })
   }
@@ -587,21 +590,36 @@ export function startGame(
         const st = windows[r]?.[c] ?? 0
         if (st === 0) continue
         const { x, y } = cellXY(c, r)
-        const ww = 50 * 1.15
-        const wh = 86 * 1.15
-        const wx = x + (cellW - ww) / 2
-        const wy = y + 8
         const sx = st === 2 ? 356 : 306
-        if (!blitSheet(sx, 120, 50, 86, wx, wy, ww, wh, 1)) {
+        if (!blitSheet(sx, 120, 50, 86, x, y, WIN_W, WIN_H, 1)) {
           k.drawRect({
-            pos: k.vec2(wx, wy),
-            width: ww,
-            height: wh,
+            pos: k.vec2(x, y),
+            width: WIN_W,
+            height: WIN_H,
             color: hexColor(st === 2 ? '#141820' : '#6a8aa8'),
           })
         }
       }
     }
+  }
+
+  function drawRalph(t: number): void {
+    const throwing = t < ralphThrowUntil
+    const { x } = cellXY(ralphCol, 0)
+    let sx = 0
+    let sy = 169
+    let sw = 87
+    let sh = 104
+    if (throwing) {
+      const fra = Math.floor(t / 140) % 2
+      sx = fra === 0 ? 372 : 240
+      sy = 206
+      sw = 132
+      sh = 116
+    }
+    const px = x + WIN_W / 2 - sw / 2
+    const py = 18
+    blitSheet(sx, sy, sw, sh, px, py, sw, sh, 1)
   }
 
   function drawFelix(p: SimPlayer, color: string, t: number): void {
@@ -623,10 +641,10 @@ export function startGame(
       sx = 29
       sw = 40
     }
-    const dh = 58
-    const dw = (sw / 65) * dh
-    const px = x + (cellW - dw) / 2
-    const py = y + cellH - dh - 6
+    const dh = 65
+    const dw = sw
+    const px = x + (WIN_W - dw) / 2
+    const py = y + WIN_H - dh
     if (!blitSheet(sx, sheL, sw, 65, px, py, dw, dh, opacity)) {
       k.drawRect({
         pos: k.vec2(px, py),
@@ -683,34 +701,45 @@ export function startGame(
   }
 
   function drawHudCanvas(): void {
+    blitSheet(0, 660, 506, 78, 0, HUD_Y, WIDTH, HUD_H, 1)
+    const gold = hexColor('#feef33')
+    for (let i = 0; i < hostP.lives; i++) {
+      blitSheet(213, 36, 20, 13, 138 + i * 21, 504, 20, 13, 1)
+    }
+    for (let i = 0; i < peerP.lives; i++) {
+      blitSheet(213, 49, 20, 13, 354 + i * 21, 504, 20, 13, 1)
+    }
     k.drawText({
-      text: `STAGE ${stage}`,
+      text: String(hostP.score),
+      pos: k.vec2(90, 468),
+      size: 15,
+      color: gold,
+    })
+    k.drawText({
+      text: hostP.name,
+      pos: k.vec2(138, 485),
+      size: 13,
+      color: gold,
+    })
+    k.drawText({
+      text: String(peerP.score),
+      pos: k.vec2(306, 468),
+      size: 15,
+      color: gold,
+    })
+    k.drawText({
+      text: peerP.name,
+      pos: k.vec2(354, 485),
+      size: 13,
+      color: gold,
+    })
+    k.drawText({
+      text: 'STAGE ' + String(stage),
       pos: k.vec2(0, 8),
-      size: 16,
+      size: 14,
       align: 'center',
       width: WIDTH,
       color: hexColor('#f2d36b'),
-    })
-    const y = HEIGHT - 62
-    k.drawRect({
-      pos: k.vec2(8, y),
-      width: WIDTH - 16,
-      height: 54,
-      color: hexColor('#0d1016'),
-      opacity: 0.82,
-      outline: { width: 2, color: hexColor('#f2d36b') },
-    })
-    k.drawText({
-      text: `${hostP.name}  ${hostP.score}   lives ${hostP.lives}${nowMs() < hostP.berserkUntil ? '  BERSERK' : ''}`,
-      pos: k.vec2(16, y + 8),
-      size: 12,
-      color: hexColor(HOST_COLOR),
-    })
-    k.drawText({
-      text: `${peerP.name}  ${peerP.score}   lives ${peerP.lives}${nowMs() < peerP.berserkUntil ? '  BERSERK' : ''}`,
-      pos: k.vec2(16, y + 28),
-      size: 12,
-      color: hexColor(JOIN_COLOR),
     })
     if (!started && !over) {
       k.drawRect({
@@ -782,6 +811,7 @@ export function startGame(
     const t = nowMs()
     drawBuilding()
     drawWindows()
+    drawRalph(t)
     drawHazards()
     drawFelix(hostP, HOST_COLOR, t)
     drawFelix(peerP, JOIN_COLOR, t)

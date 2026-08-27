@@ -124,10 +124,7 @@
     flex-direction: column;
   }
   #hud {
-    position: fixed; top: 10px; left: 10px;
-    right: 10px;
-    font-size: 11px; color: var(--dim);
-    z-index: 5; letter-spacing: 1px;
+    display: none;
   }
   #hud span.you { color: var(--accent); }
   #hud span.peer { color: var(--accent2); }
