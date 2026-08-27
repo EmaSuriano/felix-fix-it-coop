@@ -7,12 +7,14 @@ import {
   GRID_ROWS,
   HOST_COLOR,
   JOIN_COLOR,
+  MOVE_MS,
+  TICK_S,
+  SHEET_W,
+  SHEET_H,
 } from './config'
 
 const ROWS = GRID_ROWS
 const COLS = GRID_COLS
-const MOVE_MS = 150
-const TICK_S = 0.1
 const HIT_IMMUNE_MS = 2000
 const PIE_MS = 5000
 const LIFE_EVERY = 2000
@@ -47,6 +49,7 @@ type WorldMsg = {
   pie: Pie
   stage: number
   over: boolean
+  started: boolean
 }
 
 type SimPlayer = {
@@ -59,13 +62,14 @@ type SimPlayer = {
   berserkUntil: number
   name: string
   swingUntil: number
+  lastStepAt: number
 }
 
 export function startGame(
   room: Room,
-  opts: { isHost: boolean; canvas: HTMLCanvasElement; peerCountEl: HTMLElement },
+  opts: { isHost: boolean; canvas: HTMLCanvasElement; peerCountEl: HTMLElement; roomCode: string },
 ): void {
-  const { isHost, canvas, peerCountEl } = opts
+  const { isHost, canvas, peerCountEl, roomCode } = opts
   const myId: PlayerId = isHost ? 'host' : 'peer'
   const myName = isHost ? 'Host' : 'Guest'
   const peerNameDefault = isHost ? 'Guest' : 'Host'
@@ -150,6 +154,7 @@ export function startGame(
     berserkUntil: 0,
     name: isHost ? myName : peerNameDefault,
     swingUntil: 0,
+    lastStepAt: 0,
   }
   const peerP: SimPlayer = {
     id: 'peer',
@@ -161,14 +166,16 @@ export function startGame(
     berserkUntil: 0,
     name: isHost ? peerNameDefault : myName,
     swingUntil: 0,
+    lastStepAt: 0,
   }
 
-  let windows = isHost ? fillStageWindows() : emptyWindows()
+  let windows = emptyWindows()
   let bricks: Brick[] = []
   let ducks: Duck[] = []
   let pie: Pie = null
   let stage = 1
   let over = false
+  let started = false
   let peerJoined = false
   let lastPieAt = 0
   let hazardAcc = 0
@@ -207,6 +214,7 @@ export function startGame(
       pie: pie ? { ...pie } : null,
       stage,
       over,
+      started,
     }
   }
 
@@ -237,7 +245,7 @@ export function startGame(
   }
 
   function applyHammer(p: SimPlayer, col: number, row: number, t: number): void {
-    if (over || p.lives <= 0) return
+    if (!started || over || p.lives <= 0) return
     const c = clamp(Math.round(col), 0, COLS - 1)
     const r = clamp(Math.round(row), 0, ROWS - 1)
     p.col = c
@@ -286,14 +294,44 @@ export function startGame(
   }
 
   function matchOver(): boolean {
+    if (!started) return false
     if (hostP.lives > 0) return false
-    if (!peerJoined) return true
+    if (!peerJoined) return false
     return peerP.lives <= 0
+  }
+
+  function beginMatch(t: number): void {
+    if (started) return
+    started = true
+    peerJoined = true
+    windows = fillStageWindows()
+    bricks = []
+    ducks = []
+    pie = null
+    lastPieAt = t
+    sendWorld()
+  }
+
+  function pauseMatch(): void {
+    started = false
+    peerJoined = false
+    bricks = []
+    ducks = []
+    pie = null
+    sendWorld()
   }
 
   function tickHost(dt: number): void {
     if (!isHost) return
     const t = nowMs()
+    if (!started) {
+      hazardAcc += dt
+      if (hazardAcc >= TICK_S) {
+        hazardAcc = 0
+        sendWorld()
+      }
+      return
+    }
     maybePie(hostP, t)
     if (peerJoined) maybePie(peerP, t)
     if (over) {
@@ -310,18 +348,16 @@ export function startGame(
       hazardAcc -= TICK_S
       stepped = true
       moveTick++
-      if (moveTick % 2 === 0) {
-        bricks = bricks
-          .map((b) => ({ col: b.col, row: b.row + 1 }))
-          .filter((b) => b.row < ROWS)
-        ducks = ducks
-          .map((d) => ({ col: d.col + d.dir, row: d.row, dir: d.dir }))
-          .filter((d) => d.col >= 0 && d.col < COLS)
-      }
-      const maxBricks = Math.min(4, 1 + Math.floor(stage / 1))
-      const maxDucks = Math.min(3, stage)
-      const brickChance = 0.1 + stage * 0.03
-      const duckChance = 0.08 + stage * 0.03
+      bricks = bricks
+        .map((b) => ({ col: b.col, row: b.row + 1 }))
+        .filter((b) => b.row < ROWS)
+      ducks = ducks
+        .map((d) => ({ col: d.col + d.dir, row: d.row, dir: d.dir }))
+        .filter((d) => d.col >= 0 && d.col < COLS)
+      const maxBricks = Math.min(3, 1 + Math.floor(stage / 2))
+      const maxDucks = Math.min(2, stage)
+      const brickChance = 0.12
+      const duckChance = 0.08
       if (bricks.length < maxBricks && Math.random() < brickChance) {
         bricks.push({ col: randInt(0, COLS - 1), row: 0 })
       }
@@ -333,7 +369,7 @@ export function startGame(
           dir,
         })
       }
-      if (!pie && t - lastPieAt > 7000 && Math.random() < 0.08) {
+      if (!pie && t - lastPieAt > 12000 && Math.random() < 0.06) {
         pie = { col: randInt(0, COLS - 1), row: randInt(0, ROWS - 1) }
       }
       checkHits(t)
@@ -350,6 +386,7 @@ export function startGame(
     pie = data.pie ?? null
     stage = data.stage
     over = data.over
+    started = Boolean(data.started)
     const t = nowMs()
     for (const np of data.players) {
       const p = simOf(np.id)
@@ -373,7 +410,7 @@ export function startGame(
     refreshPeerCount()
     helloAction.send({ name: myName }, { target: peerId })
     posAction.send({ col: localCol, row: localRow }, { target: peerId })
-    if (isHost) sendWorld()
+    if (isHost) beginMatch(nowMs())
   }
 
   room.onPeerJoin = (peerId) => {
@@ -383,7 +420,7 @@ export function startGame(
   room.onPeerLeave = (peerId) => {
     peers.delete(peerId)
     refreshPeerCount()
-    if (peers.size === 0) peerJoined = false
+    if (peers.size === 0 && isHost && !over) pauseMatch()
   }
 
   helloAction.onMessage = (data, context) => {
@@ -438,6 +475,7 @@ export function startGame(
     if (dc && dr) dr = 0
     if (!dc && !dr) return
     lastMoveAt = t
+    me.lastStepAt = t
     localCol = clamp(localCol + dc, 0, COLS - 1)
     localRow = clamp(localRow + dr, 0, ROWS - 1)
     me.col = localCol
@@ -448,7 +486,7 @@ export function startGame(
 
   function tryHammer(): void {
     const me = simOf(myId)
-    if (over || me.lives <= 0) return
+    if (!started || over || me.lives <= 0) return
     const t = nowMs()
     me.swingUntil = t + 180
     hammerAction.send({ col: localCol, row: localRow })
@@ -488,6 +526,35 @@ export function startGame(
     void t
   }
 
+  function sheetQuad(x: number, y: number, w: number, h: number) {
+    return k.quad(x / SHEET_W, y / SHEET_H, w / SHEET_W, h / SHEET_H)
+  }
+
+  function blitSheet(
+    sx: number,
+    sy: number,
+    sw: number,
+    sh: number,
+    posX: number,
+    posY: number,
+    dw: number,
+    dh: number,
+    opacity: number,
+    flipX = false,
+  ): boolean {
+    if (!sheetOk) return false
+    k.drawSprite({
+      sprite: 'felixSheet',
+      pos: k.vec2(posX, posY),
+      quad: sheetQuad(sx, sy, sw, sh),
+      width: dw,
+      height: dh,
+      opacity,
+      flipX,
+    })
+    return true
+  }
+
   function drawBuilding(): void {
     if (mapaOk) {
       k.drawSprite({
@@ -495,14 +562,14 @@ export function startGame(
         pos: k.vec2(0, 0),
         width: WIDTH,
         height: HEIGHT,
-        quad: k.quad(0, 0, 0.5, 1),
+        quad: k.quad(0, 325 / 773, 506 / 1012, 448 / 773),
       })
       k.drawRect({
         pos: k.vec2(0, 0),
         width: WIDTH,
         height: HEIGHT,
         color: hexColor('#10131a'),
-        opacity: 0.28,
+        opacity: 0.22,
       })
       return
     }
@@ -512,77 +579,25 @@ export function startGame(
       height: HEIGHT,
       color: hexColor('#1a2230'),
     })
-    k.drawRect({
-      pos: k.vec2(PAD_X - 12, PAD_TOP - 12),
-      width: gridW + 24,
-      height: gridH + 24,
-      color: hexColor('#6b2b22'),
-      outline: { width: 3, color: hexColor('#3a1610') },
-    })
-    for (let y = PAD_TOP - 8; y < PAD_TOP + gridH + 8; y += 10) {
-      k.drawRect({
-        pos: k.vec2(PAD_X - 12, y),
-        width: gridW + 24,
-        height: 1,
-        color: hexColor('#4a1e18'),
-        opacity: 0.5,
-      })
-    }
   }
 
   function drawWindows(): void {
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
-        const { x, y } = cellXY(c, r)
-        const insetX = 12
-        const insetY = 16
-        const wx = x + insetX
-        const wy = y + insetY
-        const ww = cellW - insetX * 2
-        const wh = cellH - insetY * 2 - 6
         const st = windows[r]?.[c] ?? 0
-        k.drawRect({
-          pos: k.vec2(wx - 3, wy - 3),
-          width: ww + 6,
-          height: wh + 8,
-          color: hexColor('#c9b089'),
-        })
-        let glass = '#9ad7ff'
-        if (st === 1) glass = '#6a8aa8'
-        if (st === 2) glass = '#141820'
-        k.drawRect({
-          pos: k.vec2(wx, wy),
-          width: ww,
-          height: wh,
-          color: hexColor(glass),
-        })
-        if (st === 0) {
+        if (st === 0) continue
+        const { x, y } = cellXY(c, r)
+        const ww = 50 * 1.15
+        const wh = 86 * 1.15
+        const wx = x + (cellW - ww) / 2
+        const wy = y + 8
+        const sx = st === 2 ? 356 : 306
+        if (!blitSheet(sx, 120, 50, 86, wx, wy, ww, wh, 1)) {
           k.drawRect({
-            pos: k.vec2(wx + 4, wy + 4),
-            width: ww * 0.35,
-            height: 3,
-            color: hexColor('#ffffff'),
-            opacity: 0.55,
-          })
-        } else if (st === 1) {
-          k.drawLine({
-            p1: k.vec2(wx + 4, wy + 6),
-            p2: k.vec2(wx + ww - 6, wy + wh - 6),
-            width: 2,
-            color: hexColor('#e8e0c8'),
-          })
-          k.drawLine({
-            p1: k.vec2(wx + ww * 0.6, wy + 4),
-            p2: k.vec2(wx + 8, wy + wh * 0.7),
-            width: 2,
-            color: hexColor('#d0c4a0'),
-          })
-        } else {
-          k.drawRect({
-            pos: k.vec2(wx + 6, wy + 8),
-            width: ww - 12,
-            height: wh - 14,
-            color: hexColor('#05070c'),
+            pos: k.vec2(wx, wy),
+            width: ww,
+            height: wh,
+            color: hexColor(st === 2 ? '#141820' : '#6a8aa8'),
           })
         }
       }
@@ -591,82 +606,79 @@ export function startGame(
 
   function drawFelix(p: SimPlayer, color: string, t: number): void {
     const { x, y } = cellXY(p.col, p.row)
-    const bw = 22
-    const bh = 28
-    const px = x + (cellW - bw) / 2
-    const py = y + cellH - bh - 10
     const blinking = t < p.immuneUntil && Math.floor(t / 120) % 2 === 0
     const opacity = p.lives <= 0 ? 0.25 : blinking ? 0.35 : 1
-    const outlineCol = t < p.berserkUntil ? hexColor('#ffe566') : hexColor('#0d1016')
-    k.drawRect({
-      pos: k.vec2(px, py),
-      width: bw,
-      height: bh,
-      color: hexColor(color),
-      opacity,
-      outline: { width: 2, color: outlineCol },
-    })
-    k.drawRect({
-      pos: k.vec2(px + 5, py + 4),
-      width: 12,
-      height: 6,
-      color: hexColor('#f3d2b0'),
-      opacity,
-    })
-    const swing = t < p.swingUntil
-    const hx = swing ? px + bw - 2 : px + bw + 1
-    const hy = swing ? py + 4 : py + 10
-    k.drawRect({
-      pos: k.vec2(hx, hy),
-      width: 10,
-      height: 5,
-      color: hexColor('#f0c14a'),
-      opacity,
-    })
+    const sheL = p.id === 'peer' ? 65 : 0
+    let sx = 0
+    let sw = 29
+    if (t < p.swingUntil) {
+      if (p.swingUntil - t < 90) {
+        sx = 117
+        sw = 56
+      } else {
+        sx = 69
+        sw = 48
+      }
+    } else if (t - p.lastStepAt < 220) {
+      sx = 29
+      sw = 40
+    }
+    const dh = 58
+    const dw = (sw / 65) * dh
+    const px = x + (cellW - dw) / 2
+    const py = y + cellH - dh - 6
+    if (!blitSheet(sx, sheL, sw, 65, px, py, dw, dh, opacity)) {
+      k.drawRect({
+        pos: k.vec2(px, py),
+        width: dw,
+        height: dh,
+        color: hexColor(color),
+        opacity,
+      })
+    }
   }
 
   function drawHazards(): void {
     for (const b of bricks) {
       const { x, y } = cellXY(b.col, b.row)
-      k.drawRect({
-        pos: k.vec2(x + cellW * 0.3, y + 8),
-        width: cellW * 0.4,
-        height: 14,
-        color: hexColor('#8a3b24'),
-        outline: { width: 1, color: hexColor('#3a1510') },
-      })
+      const dw = 28
+      const dh = 22
+      if (!blitSheet(173, 0, 20, 16, x + (cellW - dw) / 2, y + 10, dw, dh, 1)) {
+        k.drawRect({
+          pos: k.vec2(x + cellW * 0.3, y + 8),
+          width: cellW * 0.4,
+          height: 14,
+          color: hexColor('#8a3b24'),
+        })
+      }
     }
     for (const d of ducks) {
       const { x, y } = cellXY(d.col, d.row)
-      const cx = x + cellW * 0.5
-      const cy = y + 18
-      k.drawCircle({
-        pos: k.vec2(cx, cy),
-        radius: 8,
-        color: hexColor('#d6c24a'),
-        anchor: 'center',
-      })
-      k.drawRect({
-        pos: k.vec2(cx + (d.dir >= 0 ? 6 : -12), cy - 2),
-        width: 8,
-        height: 4,
-        color: hexColor('#e07020'),
-      })
+      const fra = Math.floor(nowMs() / 180) % 2 === 0 ? 0 : 42
+      const dw = 42
+      const dh = 38
+      const px = x + (cellW - dw) / 2
+      if (!blitSheet(fra, 131, 42, 38, px, y + 8, dw, dh, 1, d.dir < 0)) {
+        k.drawCircle({
+          pos: k.vec2(x + cellW * 0.5, y + 18),
+          radius: 8,
+          color: hexColor('#d6c24a'),
+          anchor: 'center',
+        })
+      }
     }
     if (pie) {
       const { x, y } = cellXY(pie.col, pie.row)
-      k.drawCircle({
-        pos: k.vec2(x + cellW * 0.5, y + cellH * 0.55),
-        radius: 9,
-        color: hexColor('#e8c07a'),
-        anchor: 'center',
-      })
-      k.drawCircle({
-        pos: k.vec2(x + cellW * 0.5, y + cellH * 0.52),
-        radius: 6,
-        color: hexColor('#c44c3a'),
-        anchor: 'center',
-      })
+      const dw = 28
+      const dh = 24
+      if (!blitSheet(173, 134, 24, 20, x + (cellW - dw) / 2, y + cellH * 0.45, dw, dh, 1)) {
+        k.drawCircle({
+          pos: k.vec2(x + cellW * 0.5, y + cellH * 0.55),
+          radius: 9,
+          color: hexColor('#e8c07a'),
+          anchor: 'center',
+        })
+      }
     }
   }
 
@@ -700,6 +712,31 @@ export function startGame(
       size: 12,
       color: hexColor(JOIN_COLOR),
     })
+    if (!started && !over) {
+      k.drawRect({
+        pos: k.vec2(0, 0),
+        width: WIDTH,
+        height: HEIGHT,
+        color: hexColor('#000000'),
+        opacity: 0.45,
+      })
+      k.drawText({
+        text: 'WAITING FOR PLAYER',
+        pos: k.vec2(0, HEIGHT / 2 - 36),
+        size: 22,
+        align: 'center',
+        width: WIDTH,
+        color: hexColor('#f2d36b'),
+      })
+      k.drawText({
+        text: 'CODE  ' + roomCode.toUpperCase(),
+        pos: k.vec2(0, HEIGHT / 2),
+        size: 18,
+        align: 'center',
+        width: WIDTH,
+        color: hexColor('#e7e9ee'),
+      })
+    }
     if (over) {
       k.drawRect({
         pos: k.vec2(0, 0),
@@ -733,7 +770,6 @@ export function startGame(
         color: hexColor('#7c8394'),
       })
     }
-    void sheetOk
   }
 
   k.onUpdate(() => {

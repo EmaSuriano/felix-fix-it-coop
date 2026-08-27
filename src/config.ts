@@ -5,3 +5,7 @@ export const GRID_COLS = 5
 export const GRID_ROWS = 4
 export const HOST_COLOR = '#3b6cff'
 export const JOIN_COLOR = '#e07020'
+export const SHEET_W = 506
+export const SHEET_H = 738
+export const MOVE_MS = 300
+export const TICK_S = 0.4

@@ -21,14 +21,14 @@ position and hammer swings.
   begins with more bricks and ducks.
 - Game over: when both players are out of lives. Refresh for a new room.
 
-Host is blue; the joiner is orange. Solo hosting still runs hazards so you can
-practice.
+Host is blue; the joiner is orange. The match waits until the second player joins.
+Open the menu, Create Game, share the code or link; the other player uses Join Game.
 
 ## Local development
 
 Use the Vite dev server (port 3000). Install packages, then start the dev
-script. Open the printed localhost URL, click Create Room, and paste the share
-link into a second tab. WebRTC will not work from a file URL.
+script. Open the printed localhost URL. Create Game on one tab, Join Game with the
+room code on the second tab. WebRTC will not work from a file URL.
 
 ## How rooms work
 

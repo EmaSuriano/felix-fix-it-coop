@@ -9,22 +9,41 @@
 
 <div id="overlay">
   <div id="card">
-    <h1>FIX-IT FELIX</h1>
-    <p class="sub">Two players, one building. Host a room, share the link.</p>
+    <p class="kicker">Fix-It Felix Jr.</p>
+    <h1>CO-OP</h1>
+    <p class="sub">Two Felixes, one building. Create a game or join with a room code.</p>
 
-    <div class="row">
-      <button class="primary" id="hostBtn">Create Room</button>
+    <div id="menuMain">
+      <div class="row">
+        <button class="primary" id="createBtn">Create Game</button>
+      </div>
+      <div class="row">
+        <button id="joinMenuBtn">Join Game</button>
+      </div>
     </div>
 
-    <div id="linkRow">
+    <div id="createPanel">
+      <label>Room code</label>
+      <div id="codeDisplay">------</div>
       <label>Share this link</label>
       <div id="linkBox">
         <input type="text" id="linkInput" readonly>
         <button id="copyBtn">Copy</button>
       </div>
+      <p class="hint">Waiting on the other player. Keep this tab open.</p>
+      <button id="createBack" type="button">Back</button>
     </div>
 
-    <div id="status">Waiting...</div>
+    <div id="joinPanel">
+      <label>Room code</label>
+      <input type="text" id="joinCode" maxlength="8" placeholder="abc123" autocomplete="off" spellcheck="false">
+      <div class="row" style="margin-top:12px">
+        <button class="primary" id="joinBtn">Join Game</button>
+      </div>
+      <button id="joinBack" type="button">Back</button>
+    </div>
+
+    <div id="status"></div>
   </div>
 </div>
 
