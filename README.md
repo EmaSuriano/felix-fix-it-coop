@@ -4,6 +4,8 @@ Two Felixes, one building. A **free, open-source** browser remake you can play w
 
 **[Play in the browser](https://emasuriano.github.io/felix-fix-it-coop/)** — no account, no download, no sign-up. Anyone with a link can join.
 
+![Felix Fix-It Coop lobby](docs/lobby.png)
+
 ## What is this?
 
 A two-player coop game inspired by the Fix-It Felix Jr. arcade cabinet from *Wreck-It Ralph*. You and a friend climb the building, hammer cracked windows, and dodge Ralph's bricks and ducks.
