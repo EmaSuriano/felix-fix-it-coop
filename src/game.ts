@@ -75,6 +75,7 @@ export function startGame(
   opts: { isHost: boolean; canvas: HTMLCanvasElement; peerCountEl: HTMLElement; roomCode: string; shareBar?: HTMLElement },
 ): void {
   const { isHost, canvas, peerCountEl, roomCode, shareBar } = opts
+  let bc: BroadcastChannel | null = null
   const myId: PlayerId = isHost ? 'host' : 'peer'
   const myName = isHost ? 'Host' : 'Guest'
   const peerNameDefault = isHost ? 'Guest' : 'Host'
@@ -228,6 +229,7 @@ export function startGame(
     const msg = snapshot()
     world = msg
     worldAction.send(msg)
+    bcSend({ t: 'world', world: msg })
   }
 
   function extraLife(p: SimPlayer, prevScore: number): void {
@@ -447,6 +449,7 @@ export function startGame(
       if (isHost) peerP.name = data.name
       else hostP.name = data.name
     }
+    if (isHost) beginMatch(nowMs())
   }
 
   posAction.onMessage = (data, context) => {
@@ -471,11 +474,88 @@ export function startGame(
     applyWorld(data)
   }
 
-  if (typeof room.getPeers === 'function') {
+  type BcMsg =
+    | { t: 'here'; name: string; role: PlayerId }
+    | { t: 'world'; world: WorldMsg }
+    | { t: 'pos'; col: number; row: number }
+    | { t: 'hammer'; col: number; row: number }
+
+  try {
+    bc = new BroadcastChannel('felix-fix-it-coop:' + roomCode)
+  } catch {
+    bc = null
+  }
+
+  function bcSend(msg: BcMsg): void {
+    try {
+      bc?.postMessage(msg)
+    } catch {
+      /* ignore closed channel */
+    }
+  }
+
+  function pollPeers(): void {
+    if (typeof room.getPeers !== 'function') return
     const existing = room.getPeers() || {}
     const ids = Array.isArray(existing) ? existing : Object.keys(existing)
-    for (const peerId of ids) greetPeer(peerId)
+    for (const peerId of ids) {
+      if (!peers.has(peerId)) greetPeer(peerId)
+    }
   }
+
+  pollPeers()
+
+  if (bc) {
+    bc.onmessage = (ev: MessageEvent<BcMsg>) => {
+      const msg = ev.data
+      if (!msg || typeof msg !== 'object') return
+      if (msg.t === 'here') {
+        if (isHost && msg.role === 'peer') {
+          if (msg.name) peerP.name = msg.name
+          beginMatch(nowMs())
+        }
+        return
+      }
+      if (msg.t === 'world' && !isHost) {
+        applyWorld(msg.world)
+        return
+      }
+      if (msg.t === 'pos' && isHost) {
+        if (over) return
+        peerP.col = clamp(Math.round(msg.col), 0, COLS - 1)
+        peerP.row = clamp(Math.round(msg.row), 0, ROWS - 1)
+        maybePie(peerP, nowMs())
+        return
+      }
+      if (msg.t === 'hammer' && isHost) {
+        applyHammer(peerP, msg.col, msg.row, nowMs())
+      }
+    }
+  }
+
+  function shoutHere(): void {
+    bcSend({ t: 'here', name: myName, role: myId })
+  }
+  shoutHere()
+  const hereTimer = window.setInterval(() => {
+    if (!started) shoutHere()
+  }, 250)
+
+  let lastSim = nowMs()
+  function pump(): void {
+    pollPeers()
+    const now = nowMs()
+    const dt = Math.min((now - lastSim) / 1000, 0.5)
+    if (dt < 1 / 60) return
+    lastSim = now
+    if (isHost) tickHost(dt)
+  }
+  const pumpTimer = window.setInterval(pump, 50)
+  window.addEventListener('visibilitychange', () => {
+    shoutHere()
+    pump()
+    if (isHost) sendWorld()
+  })
 
   function tryMove(): void {
     const me = simOf(myId)
@@ -497,6 +577,7 @@ export function startGame(
     me.col = localCol
     me.row = localRow
     posAction.send({ col: localCol, row: localRow })
+    bcSend({ t: 'pos', col: localCol, row: localRow })
     if (isHost) maybePie(me, t)
   }
 
@@ -506,6 +587,7 @@ export function startGame(
     const t = nowMs()
     me.swingUntil = t + 180
     hammerAction.send({ col: localCol, row: localRow })
+    bcSend({ t: 'hammer', col: localCol, row: localRow })
     if (isHost) applyHammer(me, localCol, localRow, t)
   }
 
@@ -811,7 +893,7 @@ export function startGame(
 
   k.onUpdate(() => {
     tryMove()
-    if (isHost) tickHost(k.dt())
+    pump()
     paintHud()
   })
 
