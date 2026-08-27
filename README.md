@@ -4,7 +4,7 @@ Two Felixes, one building. A **free, open-source** browser remake you can play w
 
 **[Play in the browser](https://emasuriano.github.io/felix-fix-it-coop/)** — no account, no download, no sign-up. Anyone with a link can join.
 
-![Felix Fix-It Coop lobby](docs/lobby.png)
+![Felix Fix-It Coop lobby](https://github.com/user-attachments/assets/3b0650d5-1a5d-426c-badc-49e1a4324f98)
 
 ## What is this?
 
