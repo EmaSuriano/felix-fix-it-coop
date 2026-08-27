@@ -123,6 +123,40 @@
     align-items: center; justify-content: center;
     flex-direction: column;
   }
+  #shareBar {
+    display: none;
+    position: fixed;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 8;
+    background: #1b202b;
+    border: 2px solid #f2d36b;
+    padding: 8px 10px;
+    gap: 8px;
+    align-items: center;
+    width: min(520px, 92vw);
+  }
+  #shareBar.show { display: flex; }
+  #shareBar .shareLabel {
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #f2d36b;
+    white-space: nowrap;
+  }
+  #shareBar input {
+    flex: 1;
+    min-width: 0;
+  }
+  #shareBar button {
+    width: auto;
+    padding: 8px 12px;
+    background: #3b6cff;
+    color: #0d1016;
+    border-color: #3b6cff;
+    font-weight: bold;
+  }
   #hud {
     display: none;
   }

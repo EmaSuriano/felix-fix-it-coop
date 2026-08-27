@@ -72,9 +72,9 @@ type SimPlayer = {
 
 export function startGame(
   room: Room,
-  opts: { isHost: boolean; canvas: HTMLCanvasElement; peerCountEl: HTMLElement; roomCode: string },
+  opts: { isHost: boolean; canvas: HTMLCanvasElement; peerCountEl: HTMLElement; roomCode: string; shareBar?: HTMLElement },
 ): void {
-  const { isHost, canvas, peerCountEl, roomCode } = opts
+  const { isHost, canvas, peerCountEl, roomCode, shareBar } = opts
   const myId: PlayerId = isHost ? 'host' : 'peer'
   const myName = isHost ? 'Host' : 'Guest'
   const peerNameDefault = isHost ? 'Guest' : 'Host'
@@ -305,6 +305,12 @@ export function startGame(
     return peerP.lives <= 0
   }
 
+  function setShareBar(on: boolean): void {
+    if (!shareBar) return
+    if (on && isHost) shareBar.classList.add('show')
+    else shareBar.classList.remove('show')
+  }
+
   function beginMatch(t: number): void {
     if (started) return
     started = true
@@ -314,6 +320,7 @@ export function startGame(
     ducks = []
     pie = null
     lastPieAt = t
+    setShareBar(false)
     sendWorld()
   }
 
@@ -323,6 +330,7 @@ export function startGame(
     bricks = []
     ducks = []
     pie = null
+    setShareBar(true)
     sendWorld()
   }
 

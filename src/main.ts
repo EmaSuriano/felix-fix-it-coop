@@ -31,6 +31,9 @@ const statusEl = required<HTMLElement>('status')
 const gameWrap = required<HTMLElement>('gameWrap')
 const peerCountEl = required<HTMLElement>('peerCount')
 const gameCanvas = required<HTMLCanvasElement>('gameCanvas')
+const shareBar = required<HTMLElement>('shareBar')
+const shareLinkInput = required<HTMLInputElement>('shareLinkInput')
+const shareCopyBtn = required<HTMLButtonElement>('shareCopyBtn')
 
 function showError(msg: string) {
   overlay.style.display = 'flex'
@@ -60,16 +63,29 @@ function go(code: string, isHost: boolean) {
   })
   overlay.style.display = 'none'
   gameWrap.style.display = 'flex'
-  startGame(room, { isHost, canvas: gameCanvas, peerCountEl, roomCode: code })
+  const link = shareLink(code)
+  shareLinkInput.value = link
+  if (isHost) shareBar.classList.add('show')
+  else shareBar.classList.remove('show')
+  startGame(room, { isHost, canvas: gameCanvas, peerCountEl, roomCode: code, shareBar })
+}
+
+function copyShare(btn: HTMLButtonElement, value: string) {
+  shareLinkInput.select()
+  void navigator.clipboard.writeText(value)
+  const prev = btn.textContent
+  btn.textContent = 'Copied!'
+  setTimeout(() => {
+    btn.textContent = prev
+  }, 1200)
 }
 
 copyBtn.addEventListener('click', () => {
-  linkInput.select()
-  void navigator.clipboard.writeText(linkInput.value)
-  copyBtn.textContent = 'Copied!'
-  setTimeout(() => {
-    copyBtn.textContent = 'Copy'
-  }, 1200)
+  copyShare(copyBtn, linkInput.value)
+})
+
+shareCopyBtn.addEventListener('click', () => {
+  copyShare(shareCopyBtn, shareLinkInput.value)
 })
 
 function onCreate() {
